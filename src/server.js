@@ -57,7 +57,29 @@ const server = http.createServer(async (req, res) => {
       if (body.pageId !== PAGE_ID) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'page-not-allowed' })); return; }
       if (/(token|password|secret)/i.test(JSON.stringify(Object.keys(body)))) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: 'forbidden-field' })); return; }
       await sendMessage(body.recipientPsid, body.message);
-      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true })); return;
+      // v6 CHAT REFRESH FIX: the Graph send alone left the owner
+      // message out of Firestore, so the website/app thread lost it
+      // on refresh (they reload from Firestore). The server is now
+      // the SINGLE writer of owner messages: append here, and the
+      // website/app only READ the thread back. upsert() merges, so
+      // paused/status/name/profilePic/ownerId are preserved — this
+      // endpoint deliberately does NOT change paused/status (the
+      // app/website updateLeadStatus owns pause/resume).
+      // A history-write failure must never fail the Messenger send.
+      let saved = false;
+      try {
+        const existing = await store.get(body.pageId, body.recipientPsid);
+        const prior = existing?.messages || [];
+        await store.upsert({
+          pageId: body.pageId,
+          psid: body.recipientPsid,
+          lastMessage: body.message,
+          updated_at: new Date().toISOString(),
+          messages: [...prior, { role: 'owner', text: body.message, created_at: new Date().toISOString() }],
+        });
+        saved = true;
+      } catch (e) { console.error('[messenger-reply history-write failed]', e); }
+      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, saved })); return;
     }
     // Messenger webhook: POST /webhook
     if (req.method === 'POST' && url.pathname === '/webhook') {
