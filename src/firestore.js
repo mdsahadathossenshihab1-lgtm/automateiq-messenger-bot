@@ -5,6 +5,7 @@
 // must fall back to MemoryStore (local tests). This file never contains a secret.
 import { MemoryStore } from './store.js';
 
+
 export async function createStore() {
   const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '';
   if (!saJson) {
@@ -13,7 +14,8 @@ export async function createStore() {
   }
   let admin;
   try {
-    admin = await import('firebase-admin');
+    const imported = await import('firebase-admin');
+    admin = imported.default || imported;
   } catch {
     console.log('[store] firebase-admin not installed, using MemoryStore. Run: npm install firebase-admin');
     return new MemoryStore();
