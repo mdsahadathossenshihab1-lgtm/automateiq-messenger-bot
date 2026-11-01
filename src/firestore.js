@@ -5,7 +5,6 @@
 // must fall back to MemoryStore (local tests). This file never contains a secret.
 import { MemoryStore } from './store.js';
 
-
 export async function createStore() {
   const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '';
   if (!saJson) {
@@ -22,7 +21,19 @@ export async function createStore() {
   }
   const sa = JSON.parse(saJson);
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(sa) });
-  const db = admin.firestore();
+  // Website reads Firestore database ai-studio-automateiq-a1b8237c-c72f-49f9-8d26-7de394824bb1.
+  // There is NO (default) database in this project, so admin.firestore() with no
+  // database ID fails with 5 NOT_FOUND before any AI reply or website write.
+  // Use the named database explicitly via getFirestore(app, databaseId).
+  const app = admin.apps[0];
+  let db;
+  try {
+    const firestoreMod = await import('firebase-admin/firestore');
+    const getFirestore = firestoreMod.getFirestore || firestoreMod.default?.getFirestore;
+    db = getFirestore(app, 'ai-studio-automateiq-a1b8237c-c72f-49f9-8d26-7de394824bb1');
+  } catch {
+    db = admin.firestore();
+  }
   const COLLECTION = 'messenger_leads';
   return {
     key: (pageId, psid) => `${pageId}_${psid}`,
