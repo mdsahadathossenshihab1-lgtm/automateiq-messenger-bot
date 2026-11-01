@@ -19,6 +19,16 @@ The website and this bot talk through the SAME Firebase Firestore collection:
 - Website reply endpoint: POST /messenger-reply with {businessId, pageId, recipientPsid, message},
   only pageId 825495483971307 accepted, returns {ok: true}. This matches the old n8n
   messenger-reply contract, so the website only needs its webhook URL changed, not its code.
+- v6 CHAT REFRESH FIX (2026-11-01): /messenger-reply now ALSO persists the owner message
+  to Firestore after a successful Graph send — it appends {role: 'owner', text, created_at}
+  to the same messenger_leads doc (<pageId>_<psid>), updates lastMessage/updated_at, and
+  returns {ok: true, saved: true} (or saved: false if only the history write failed — the
+  Messenger send itself is never failed by a history-write failure). The server is the
+  SINGLE writer of owner messages: the website/app must NOT also write the owner message
+  to Firestore, or it will appear twice. This endpoint deliberately does NOT change
+  paused/status — pause/resume still belong to updateLeadStatus (Take Over / Resume AI).
+  Before this fix, replies sent from the website/app vanished on refresh, because refresh
+  reloads the thread from Firestore and the owner message was never written there.
 
 ## Run locally (test mode, no live message)
 ```
